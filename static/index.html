@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIFTY Options Strategy Advisor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="layout">
+
+  <aside class="controls">
+    <div class="brand">
+      <span class="brand-mark">N50</span>
+      <div>
+        <h1>Options Strategy Advisor</h1>
+        <p class="sub">NIFTY &middot; live via Angel One</p>
+      </div>
+    </div>
+
+    <!-- Connection gate -->
+    <div id="connectPanel" class="connect-panel">
+      <div class="connect-status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Not connected</span>
+      </div>
+      <p class="connect-copy">Log in to your Angel One SmartAPI session to pull live spot, VIX, and option chain data.</p>
+      <button type="button" class="primary-btn" id="connectBtn">Connect to Angel One</button>
+      <p class="status-error hidden" id="connectError"></p>
+    </div>
+
+    <!-- Main tool, hidden until connected -->
+    <div id="mainControls" class="hidden">
+
+      <div class="connect-status connect-status--small">
+        <span class="status-dot status-dot--ok"></span>
+        <span id="connectedAs">Connected</span>
+      </div>
+
+      <div class="ticker" id="ticker">
+        <div class="ticker-row">
+          <span class="ticker-label">Spot</span>
+          <span class="ticker-value" id="spotValue">&mdash;</span>
+        </div>
+        <div class="ticker-row">
+          <span class="ticker-label">India VIX</span>
+          <span class="ticker-value" id="vixValue">&mdash;</span>
+        </div>
+        <div class="ticker-row">
+          <span class="ticker-label">Expiry</span>
+          <span class="ticker-value" id="expiryValue">&mdash;</span>
+        </div>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" id="tabGuided" role="tab">Guided</button>
+        <button type="button" class="tab" id="tabBrowse" role="tab">Browse all</button>
+      </div>
+
+      <form id="guidedForm" class="panel-form">
+        <label class="field">
+          <span>Expiry</span>
+          <select id="expiryGuided" required></select>
+        </label>
+
+        <label class="field">
+          <span>Your predicted direction</span>
+          <select id="direction" required>
+            <option value="bullish">Bullish</option>
+            <option value="bearish">Bearish</option>
+            <option value="neutral">Neutral / range-bound</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Risk preference</span>
+          <select id="risk_pref" required>
+            <option value="defined">Defined risk (capped loss)</option>
+            <option value="undefined">Open to uncapped risk</option>
+          </select>
+        </label>
+
+        <p class="strategy-hint">IV regime is read live from India VIX (cutoff in <code>config.py</code>) -- no manual guess needed.</p>
+
+        <button type="submit" class="primary-btn" id="suggestBtn">Get suggestion</button>
+      </form>
+
+      <form id="browseForm" class="panel-form hidden">
+        <label class="field">
+          <span>Expiry</span>
+          <select id="expiryBrowse" required></select>
+        </label>
+
+        <label class="field">
+          <span>Strategy</span>
+          <select id="strategyPicker" required></select>
+        </label>
+
+        <p class="strategy-hint" id="strategyHint"></p>
+
+        <button type="submit" class="primary-btn" id="browseBtn">Show strategy</button>
+      </form>
+
+      <p class="disclaimer">Rule-based on standard options theory. Not financial advice &mdash; verify strikes and liquidity before placing anything.</p>
+    </div>
+  </aside>
+
+  <main class="results">
+
+    <div id="statusBanner" class="status hidden"></div>
+
+    <section id="strategyCard" class="strategy-card hidden">
+      <div class="strategy-header">
+        <span class="strategy-tag" id="strategyTag">&mdash;</span>
+        <h2 id="strategyName">&mdash;</h2>
+      </div>
+      <p id="strategyDesc" class="strategy-desc"></p>
+      <p id="regimeNote" class="regime-note hidden"></p>
+      <p id="multiExpiryNote" class="multi-expiry-note hidden"></p>
+
+      <div class="metrics">
+        <div class="metric">
+          <span class="metric-label">Net premium</span>
+          <span class="metric-value" id="netPremium">&mdash;</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Max profit</span>
+          <span class="metric-value profit" id="maxProfit">&mdash;</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Max loss</span>
+          <span class="metric-value loss" id="maxLoss">&mdash;</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Breakeven(s)</span>
+          <span class="metric-value" id="breakevens">&mdash;</span>
+        </div>
+      </div>
+
+      <table class="legs-table" id="legsTable">
+        <thead>
+          <tr><th>Action</th><th>Contract</th><th>Strike</th><th>Type</th><th>Qty</th><th>Price</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <canvas id="payoffChart" width="800" height="260"></canvas>
+    </section>
+
+    <section class="chain-section">
+      <div class="chain-header">
+        <h3>Option chain</h3>
+        <span id="chainMeta" class="chain-meta"></span>
+      </div>
+      <div class="chain-scroll">
+        <table class="chain-table" id="chainTable">
+          <thead>
+            <tr>
+              <th colspan="5">Calls</th>
+              <th>Strike</th>
+              <th colspan="5">Puts</th>
+            </tr>
+            <tr>
+              <th>OI</th><th>IV</th><th>Delta</th><th>LTP</th><th></th>
+              <th></th>
+              <th></th><th>LTP</th><th>Delta</th><th>IV</th><th>OI</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
